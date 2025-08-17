@@ -1,11 +1,12 @@
-from axonlib.layers import Dense, Dropout, Flatten, Reshape, Conv
-import axonlib as ax
+from synnet.layers import Dense, Dropout, Flatten, Reshape, Conv, Pool
+import synnet as sn
 import numpy as np
 
 if __name__ == "__main__":
-    m = ax.model.Sequential([
+    m = sn.model.Sequential([
         Reshape((28, 28, 1)),
-        Conv((4, 4, 1), padding="valid", stride=1),
+        Conv((4, 3, 2), padding="valid", stride=1),
+        Pool(3, stride=2, padding="valid", pool_mode="max"),
         Flatten(),
         Dense(30, act_func="tanh", weights_init="lecun"),
         Dropout(0.1),
@@ -18,7 +19,7 @@ if __name__ == "__main__":
     m.forprop(np.random.rand(4, 28, 28))
     m.backprop(np.random.rand(4, 10), 0.01, 0.1)
 
-    data = ax.data.DataLoader.mnist()
+    data = sn.data.DataLoader.mnist()
 
     m.fit(data, epochs=1, batch_size=300, learning_rate=0.001, clip_value=1)
 
