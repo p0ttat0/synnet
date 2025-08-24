@@ -2,13 +2,14 @@ from typing import Tuple
 from numpy.lib.stride_tricks import as_strided
 import numpy as np
 
-def get_windows(input_tensor: np.ndarray, kernel_shape: Tuple[int, int, int, int], stride: Tuple[int, int]):
+def get_windows(input_tensor: np.ndarray, kernel_shape: Tuple[int, int, int, int], stride: Tuple[int, int], writable=False):
     """
     Extracts sliding windows from input tensor for convolution. (NHWC)
 
     :param input_tensor: Shape (batch, height, width, channels_in).
     :param kernel_shape: Tuple (kernel_h, kernel_w, channels_in, channels_out).
     :param stride: Tuple [stride_h, stride_w].
+    :param writable: whether windows are to be writable
 
     :returns: np.ndarray: Windows of shape (batch, out_h, out_w, kernel_h, kernel_w, channels_in).
     """
@@ -33,7 +34,7 @@ def get_windows(input_tensor: np.ndarray, kernel_shape: Tuple[int, int, int, int
         input_tensor,
         shape=(batch_size, output_height, output_width, kernel_height, kernel_width, input_channels),
         strides=strides,
-        writeable=False
+        writeable=writable
     )
 
     return windows

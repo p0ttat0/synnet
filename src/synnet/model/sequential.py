@@ -1,3 +1,4 @@
+import time
 from typing import Tuple, List
 from synnet.base.learnable_layer_base import LearnableLayerBase
 from synnet.base.utility_layer_base import UtilityLayerBase
@@ -71,8 +72,10 @@ class Sequential:
             raise Exception("model not initialized")
 
         for layer in self.layers:
+            # s_time = time.time()
             if not isinstance(layer, Dropout) or not training:
                 input_tensor = layer.forprop(input_tensor)
+            # print(f"type: {type(layer)} | {time.time() - s_time}s")
         return input_tensor
 
     def backprop(self, output_gradient: np.ndarray, lr: float, clip_value: float):
@@ -86,10 +89,12 @@ class Sequential:
             raise Exception("model not initialized")
 
         for layer in reversed(self.layers):
+            # s_time = time.time()
             if isinstance(layer, LearnableLayerBase):
                 output_gradient = layer.backprop(output_gradient, lr, clip_value)
             else:
                 output_gradient = layer.backprop(output_gradient)
+            # print(f"type: {type(layer)} | {time.time() - s_time}s")
 
     def fit(self, data: Data, epochs: int, batch_size: int, learning_rate: float, clip_value: float):
         """

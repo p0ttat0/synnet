@@ -6,7 +6,7 @@ if __name__ == "__main__":
     m = sn.model.Sequential([
         Reshape((28, 28, 1)),
         Conv((4, 3, 2), padding="valid", stride=1),
-        Pool(3, stride=2, padding="valid", pool_mode="max"),
+        Pool(3, stride=2, padding="valid", pool_mode="average"),
         Flatten(),
         Dense(30, act_func="tanh", weights_init="lecun"),
         Dropout(0.1),
