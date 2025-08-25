@@ -24,5 +24,5 @@ if __name__ == "__main__":
 
     data = sn.data.DataLoader.mnist()
 
-    m.fit(data, epochs=1, batch_size=300, learning_rate=0.001, clip_value=1, metrics=["accuracy", "precision"])
+    m.fit(data, epochs=10, batch_size=300, learning_rate=0.001, clip_value=1, metrics=["accuracy"])
 
