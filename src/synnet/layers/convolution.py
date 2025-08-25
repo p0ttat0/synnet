@@ -1,7 +1,7 @@
 from typing import Tuple
 from synnet.base.learnable_layer_base import LearnableLayerBase
 from synnet.layers.activation_functions import Relu, Sigmoid, Tanh, Swish, Softmax
-from synnet.layers.helpers.convolution_helpers import cross_correlate, convolve, dilate
+from synnet.layers.helpers.convolution_helpers import cross_correlate, convolve, dilate, pad
 from synnet.layers.helpers.parameter_init import WeightInit, BiasInit
 import numpy as np
 
@@ -24,8 +24,8 @@ class Conv(LearnableLayerBase):
     :var bias: (output_channels, ) np array
     :var input_cache: (batchsize, input_height, input_width, input_channels) np array
     :var unactivated_output_cache: (batchsize, output_height, output_width, output_channels) np array
-    :var cropped_input_width: the width of the active space in the input where the kernel actually touches
-    :var cropped_input_height: the height of the active space in the input where the kernel actually touches
+    :var cropped_padded_in_w: the width of the active space in the input where the kernel actually touches
+    :var cropped_padded_in_h: the height of the active space in the input where the kernel actually touches
     """
     def __init__(self, kernel_params: Tuple[int, int, int], act_func='relu', padding='valid', stride=(1, 1), weights_init='he', bias_init='zero', dtype=np.float32):
         if len(kernel_params) != 3: raise ValueError("conv layer kernel params must be (kernel_height, kernel_width, output_channels)")
@@ -64,8 +64,10 @@ class Conv(LearnableLayerBase):
         self.unactivated_output_cache = None
 
         # deployment
-        self.cropped_input_height = None
-        self.cropped_input_width = None
+        self.padded_in_h = None
+        self.padded_in_w = None
+        self.cropped_padded_in_h = None
+        self.cropped_padded_in_w = None
 
     def param_init(self, in_shape: Tuple[int, int, int]) -> Tuple[int, int, int]:
         """
@@ -73,8 +75,8 @@ class Conv(LearnableLayerBase):
         :param in_shape: number of neurons in previous layer
         """
         in_h, in_w, in_ch = in_shape
-        out_h = (in_h + 2*self.padding[0] - self.kernel_params[0] + 1) // self.stride[0]
-        out_w = (in_w + 2*self.padding[1] - self.kernel_params[1] + 1) // self.stride[1]
+        out_h = 1 + (in_h + 2*self.padding[0] - self.kernel_params[0]) // self.stride[0]
+        out_w = 1 + (in_w + 2*self.padding[1] - self.kernel_params[1]) // self.stride[1]
         out_ch = self.kernel_params[2]
 
         in_size = in_h*in_w*in_ch
@@ -104,8 +106,10 @@ class Conv(LearnableLayerBase):
                 case _:
                     raise NotImplementedError(f"{self.bias_init} bias initialization not implemented")
 
-        self.cropped_input_height = (out_h - 1) * self.stride[0] + kernel_shape[0]
-        self.cropped_input_width = (out_w - 1) * self.stride[1] + kernel_shape[1]
+        self.padded_in_h = in_h + 2 * self.padding[0]
+        self.padded_in_w = in_w + 2 * self.padding[1]
+        self.cropped_padded_in_h = (out_h - 1) * self.stride[0] + kernel_shape[0]
+        self.cropped_padded_in_w = (out_w - 1) * self.stride[1] + kernel_shape[1]
 
         return out_h, out_w, out_ch
 
@@ -133,12 +137,20 @@ class Conv(LearnableLayerBase):
         lr = self.dtype(lr)
         clip_value = self.dtype(clip_value)
         batch_size = output_gradient.shape[0]
-        cropped_input_cache = self.input_cache[:, :self.cropped_input_height, :self.cropped_input_width, :]     # ignores outer values missed due to stride to preserve correct dimensions
+        cropped_input_cache = pad(self.input_cache, self.padding)[:, :self.cropped_padded_in_h, :self.cropped_padded_in_w, :]     # ignores outer values missed due to stride to preserve correct dimensions
 
         dz = dilate(output_gradient * self._ACTIVATION_MAP[self.act_func].derivative(self.unactivated_output_cache), self.stride)
-        dw = cross_correlate(cropped_input_cache.transpose(3, 1, 2, 0), dz.transpose(1, 2, 0, 3), stride=(1, 1), padding=self.padding).transpose(1, 2, 0, 3)/batch_size
+        dw = cross_correlate(cropped_input_cache.transpose(3, 1, 2, 0), dz.transpose(1, 2, 0, 3), stride=(1, 1), padding=(0, 0)).transpose(1, 2, 0, 3)/batch_size
         db = np.sum(dz, axis=(0, 1, 2))/batch_size
-        di = convolve(dz, self.weights.transpose(0, 1, 3, 2), stride=(1, 1), padding=(self.weights.shape[0]-1-self.padding[0], self.weights.shape[1]-1-self.padding[1]))
+
+        di_conv_padding = (     # adjusts padding to avoid calculating input gradients for active and inactive padding
+            self.weights.shape[0] - 1 - self.padding[0],
+            self.padded_in_h - self.cropped_padded_in_h,
+            self.weights.shape[1] - 1 - self.padding[1],
+            self.padded_in_w - self.cropped_padded_in_w,
+        )
+
+        di = convolve(dz, self.weights.transpose(0, 1, 3, 2), stride=(1, 1), padding=di_conv_padding)
 
         weight_change, bias_change = self.optimizer.adjust_gradient(dw, db, lr)
         self.weights -= np.clip(weight_change, -clip_value, clip_value)
