@@ -8,6 +8,8 @@ from synnet.model.loss_functions import CCE, MSE
 from synnet.optimizers.adam import Adam
 from synnet.optimizers.no_optimizer import NoOptimizer
 import numpy as np
+from synnet.layers.helpers.training_display import ProgressBar
+
 
 class Sequential:
     """
@@ -22,6 +24,11 @@ class Sequential:
         self._LOSS_MAP = {
             'CCE': CCE(),
             'MSE': MSE()
+        }
+        self._METRICS_MAP = {
+            'accuracy': lambda x, y: 0,
+            'precision': lambda x, y: 0,
+            'recall': lambda x, y: 0
         }
 
         self.layers = [] if layers is None else layers
@@ -96,7 +103,7 @@ class Sequential:
                 output_gradient = layer.backprop(output_gradient)
             # print(f"type: {type(layer)} | {time.time() - s_time}s")
 
-    def fit(self, data: Data, epochs: int, batch_size: int, learning_rate: float, clip_value: float):
+    def fit(self, data: Data, epochs: int, batch_size: int, learning_rate: float, clip_value: float, metrics: List[str] = None):
         """
         Fits the model to the data.
         :param data: data to fit to
@@ -104,20 +111,37 @@ class Sequential:
         :param batch_size: batch size
         :param learning_rate: learning rate
         :param clip_value: clip value
+        :param metrics: list of metrics to track
         """
         if not self.initialized:
             raise Exception("model not initialized")
 
+        if metrics is None:
+            metrics = []
+
+        for metric in metrics:
+            if metric not in self._METRICS_MAP:
+                raise ValueError(f"Metric '{metric}' not supported.")
+
         batches_per_epoch = data.training_data.shape[0] // batch_size
+        progress_bar = ProgressBar(total_steps=batches_per_epoch, epochs=epochs)
+        progress_bar.start()
+
         for epoch in range(epochs):
             data.shuffle('training')
             for batch in range(batches_per_epoch):
                 training_labels = data.training_labels[batch * batch_size:(batch + 1) * batch_size]
                 training_data = data.training_data[batch * batch_size:(batch + 1) * batch_size]
-                training_predictions = self.forprop(training_data)
+                training_predictions = self.forprop(training_data, training=True)
 
                 loss = self._LOSS_MAP[self.loss_func].get_loss(training_labels, training_predictions, batch_size)
                 d_loss = self._LOSS_MAP[self.loss_func].get_d_loss(training_labels, training_predictions)
 
                 self.backprop(d_loss, learning_rate, clip_value)
-                print(loss)
+
+                metric_results = {'loss': loss}
+                for metric in metrics:
+                    metric_results[metric] = self._METRICS_MAP[metric](training_labels, training_predictions)
+
+                progress_bar.update(epoch, batch, metric_results)
+        progress_bar.end()
