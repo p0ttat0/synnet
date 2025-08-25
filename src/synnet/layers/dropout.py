@@ -29,7 +29,7 @@ class Dropout(UtilityLayerBase):
         :param input_tensor: input tensor
         :return: output tensor
         """
-        self.bin_map = np.random.rand(*input_tensor.shape) > self.dropout_rate
+        self.bin_map = np.random.rand(*input_tensor.shape[1:]) > self.dropout_rate
         return input_tensor * self.bin_map
 
     def backprop(self, output_gradient: np.ndarray) -> np.ndarray:
