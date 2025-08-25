@@ -145,9 +145,9 @@ class Conv(LearnableLayerBase):
 
         di_conv_padding = (     # adjusts padding to avoid calculating input gradients for active and inactive padding
             self.weights.shape[0] - 1 - self.padding[0],
-            self.padded_in_h - self.cropped_padded_in_h,
+            self.weights.shape[0] - 1 - self.padding[0] + (self.padded_in_h - self.cropped_padded_in_h),
             self.weights.shape[1] - 1 - self.padding[1],
-            self.padded_in_w - self.cropped_padded_in_w,
+            self.weights.shape[1] - 1 - self.padding[1] + (self.padded_in_w - self.cropped_padded_in_w),
         )
 
         di = convolve(dz, self.weights.transpose(0, 1, 3, 2), stride=(1, 1), padding=di_conv_padding)
