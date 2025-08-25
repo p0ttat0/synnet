@@ -53,18 +53,22 @@ class Pool(UtilityLayerBase):
 
         bs, in_h, in_w, in_ch = self.input_cache.shape
         di = pad(np.zeros_like(self.input_cache), self.padding)
-        di_windows = get_windows(di, (self.kernel_size, self.kernel_size, in_ch, in_ch), self.stride, writable=True)
+        di_windows = get_windows(di, (self.kernel_size, self.kernel_size, in_ch, in_ch), self.stride, writable=True)    # di_windows points directly to memory locations of elements in di
 
         grad_expanded = output_gradient[:, :, :, np.newaxis, np.newaxis, :]
 
         if self.pool_mode == "max":
+            # broadcasts gradient with associated normalized window mask then adds that to the windows
             grad_windows = grad_expanded * self.normalized_mask
             np.add.at(di_windows, None, grad_windows)
+            di = di[:, self.padding[0]:self.padding[0] + in_h, self.padding[1]:self.padding[1] + in_w, :]
 
             return di
         elif self.pool_mode == "average":
+            # broadcast adds normalized gradient with associated window
             grad_windows = grad_expanded / self.kernel_size**2
             np.add.at(di_windows, None, grad_windows)
+            di = di[:, self.padding[0]:self.padding[0] + in_h, self.padding[1]:self.padding[1] + in_w, :]
 
             return di
 
