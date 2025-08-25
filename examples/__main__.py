@@ -5,8 +5,11 @@ import numpy as np
 if __name__ == "__main__":
     m = sn.model.Sequential([
         Reshape((28, 28, 1)),
-        Conv((4, 3, 2), padding="valid", stride=1),
-        Pool(3, stride=2, padding="valid", pool_mode="average"),
+        #Conv((4, 3, 2), padding="full", stride=2),
+        #Pool(3, stride=1, padding="full", pool_mode="max"),
+        Conv((3, 3, 2), padding="valid", stride=1),
+        Pool(3, stride=1, padding="valid", pool_mode="average"),
+        Dropout(0.1),
         Flatten(),
         Dense(30, act_func="tanh", weights_init="lecun"),
         Dropout(0.1),
@@ -21,5 +24,5 @@ if __name__ == "__main__":
 
     data = sn.data.DataLoader.mnist()
 
-    m.fit(data, epochs=1, batch_size=300, learning_rate=0.001, clip_value=1)
+    m.fit(data, epochs=1, batch_size=300, learning_rate=0.001, clip_value=1, metrics=["accuracy", "precision"])
 
