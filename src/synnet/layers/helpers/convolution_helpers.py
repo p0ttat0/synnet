@@ -17,8 +17,8 @@ def get_windows(input_tensor: np.ndarray, kernel_shape: Tuple[int, int, int, int
     batch_size, height, width, input_channels = input_tensor.shape
     kernel_height, kernel_width, _, output_channels = kernel_shape
 
-    output_height = (height - kernel_height + 1) // stride[0]
-    output_width = (width - kernel_width + 1) // stride[1]
+    output_height = 1 + (height - kernel_height) // stride[0]
+    output_width = 1 + (width - kernel_width) // stride[1]
 
     batch_stride, height_stride, width_stride, channel_stride = input_tensor.strides
     strides = (
@@ -40,22 +40,32 @@ def get_windows(input_tensor: np.ndarray, kernel_shape: Tuple[int, int, int, int
     return windows
 
 
-def pad(x: np.ndarray, padding: Tuple[int, int]):
+def pad(x: np.ndarray, padding: Tuple[int, int] | Tuple[int, int, int, int]):
     """
     Zeros padding (NHWC)
 
     :param x: (batch_size, height, width, channels) np array
-    :param padding: (height_padding, width_padding)
+    :param padding: (height_padding, width_padding) or (top_padding, bottom_padding, left_padding, right_padding)
 
     :return: padded input (NHWC)
     """
-    pad_h, pad_w = padding
-    bs, in_h, in_w, ch = x.shape
+    if len(padding) == 2:
+        pad_h, pad_w = padding
+        bs, in_h, in_w, ch = x.shape
 
-    padded = np.zeros((bs, in_h + 2 * pad_h, in_w + 2 * pad_w, ch), dtype=x.dtype)
-    padded[:, pad_h:pad_h+in_h, pad_w:pad_w+in_w, :] = x
+        padded = np.zeros((bs, (in_h + 2 * pad_h), (in_w + 2 * pad_w), ch), dtype=x.dtype)
+        padded[:, pad_h:pad_h+in_h, pad_w:pad_w+in_w, :] = x
 
-    return padded
+        return padded
+    elif len(padding) == 4:
+        pad_t, pad_b, pad_l, pad_r = padding
+        bs, in_h, in_w, ch = x.shape
+        padded = np.zeros((bs, (in_h + pad_t + pad_b), (in_w + pad_l + pad_r), ch), dtype=x.dtype)
+        padded[:, pad_t:pad_t + in_h, pad_l:pad_l + in_w, :] = x
+
+        return padded
+    else:
+        raise ValueError("padding must be a tuple of length 2 or 4")
 
 def dilate(input_tensor: np.ndarray, dilation_rate: Tuple[int, int]):
     """
@@ -75,14 +85,14 @@ def dilate(input_tensor: np.ndarray, dilation_rate: Tuple[int, int]):
 
     return dilated
 
-def cross_correlate(input_tensor: np.ndarray, kernel: np.ndarray, stride: Tuple[int, int], padding: Tuple[int, int]):
+def cross_correlate(input_tensor: np.ndarray, kernel: np.ndarray, stride: Tuple[int, int], padding: Tuple[int, int] | Tuple[int, int, int, int]):
     """
     cross correlation (NHWC)
 
     :param input_tensor  : (NHWC)
     :param kernel : (kernel_height, kernel_width, input_channels, output_channels)
     :param stride : (vertical_stride, horizontal_stride)
-    :param padding: (vertical_padding, horizontal_padding)
+    :param padding: (height_padding, width_padding) or (top_padding, bottom_padding, left_padding, right_padding)
 
     :returns: cross correlation result (NHWC)
     """
@@ -96,8 +106,8 @@ def cross_correlate(input_tensor: np.ndarray, kernel: np.ndarray, stride: Tuple[
 
     # --- Output Dimensions ---
     _, padded_height, padded_width, _ = padded_input.shape
-    output_height = (padded_height - kernel_height + 1) // stride[0]
-    output_width = (padded_width - kernel_width + 1) // stride[1]
+    output_height = 1 + (padded_height - kernel_height) // stride[0]
+    output_width = 1 + (padded_width - kernel_width) // stride[1]
 
     windows = get_windows(padded_input, kernel.shape, stride)
 
@@ -107,14 +117,14 @@ def cross_correlate(input_tensor: np.ndarray, kernel: np.ndarray, stride: Tuple[
 
     return output.reshape(batch_size, output_height, output_width, output_channels)
 
-def convolve(input_tensor: np.ndarray, kernel: np.ndarray, stride: Tuple[int, int], padding: Tuple[int, int]):
+def convolve(input_tensor: np.ndarray, kernel: np.ndarray, stride: Tuple[int, int], padding: Tuple[int, int] | Tuple[int, int, int, int]):
     """
     convolution built on cross_correlate (NHWC)
 
     :param input_tensor  : (NHWC)
     :param kernel : (kernel_height, kernel_width, input_channels, output_channels)
     :param stride : (vertical_stride, horizontal_stride)
-    :param padding: (vertical_padding, horizontal_padding)
+    :param padding: (height_padding, width_padding) or (top_padding, bottom_padding, left_padding, right_padding)
 
     :return: convolution result (NHWC)
     """
