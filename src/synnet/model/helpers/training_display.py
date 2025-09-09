@@ -1,13 +1,13 @@
 import time
 import sys
 
+
 class ProgressBar:
     def __init__(self, total_steps, epochs, bar_length=50):
         self.total_steps = total_steps
         self.epochs = epochs
         self.bar_length = bar_length
         self.start_time = None
-        self.num_digits = len(str(self.total_steps))
 
     def start(self):
         self.start_time = time.time()
@@ -25,12 +25,11 @@ class ProgressBar:
         time_remaining = (self.total_steps - (current_step + 1)) * time_per_step
 
         metrics_str = " | ".join([f"{name}: {value:.4f}" for name, value in metrics.items()])
-        current_step_formatted = f"{current_step+1:0{self.num_digits}d}"
 
         sys.stdout.write(
-            f"\rEpoch {epoch+1}/{self.epochs} [{current_step_formatted}/{self.total_steps}] "
+            f"\rEpoch {epoch+1}/{self.epochs} [{current_step}/{self.total_steps}] "
             f"[{bar}] {percent*100:.1f}% - "
-            f"ETA: {time.strftime('%H:%M:%S', time.gmtime(time_remaining))} - "
+            f"ETA: {time.strftime('%H:%M:%S', time.gmtime(time_remaining))} | "
             f"{metrics_str}"
         )
         sys.stdout.flush()
