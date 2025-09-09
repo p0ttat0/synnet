@@ -24,8 +24,8 @@ class Pool(UtilityLayerBase):
 
     def param_init(self, in_shape: Tuple[int, int, int]) -> Tuple[int, int, int]:
         in_h, in_w, in_ch = in_shape
-        out_h = (in_h + 2*self.padding[0] - self.kernel_size + 1) // self.stride[0]
-        out_w = (in_w + 2*self.padding[1] - self.kernel_size + 1) // self.stride[1]
+        out_h = 1 + (in_h + 2*self.padding[0] - self.kernel_size) // self.stride[0]
+        out_w = 1 + (in_w + 2*self.padding[1] - self.kernel_size) // self.stride[1]
 
         return out_h, out_w, in_ch
 
