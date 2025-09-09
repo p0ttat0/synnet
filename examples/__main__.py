@@ -7,7 +7,7 @@ if __name__ == "__main__":
         Reshape((28, 28, 1)),
         Conv((3, 3, 4), padding="valid", stride=2),
         Dropout(0.1),
-        Pool(3, stride=2, padding="valid", pool_mode="max"),
+        Pool(3, stride=2, padding="full", pool_mode="max"),
         Flatten(),
         Dense(128, act_func="swish", weights_init="swish"),
         Dropout(0.1),

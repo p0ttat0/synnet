@@ -181,16 +181,13 @@ class Conv(LearnableLayerBase):
         lr = self.dtype(lr)
         clip_value = self.dtype(clip_value)
         batch_size = output_gradient.shape[0]
-        cropped_in = pad(self.input_cache, self.padding)[:, :self.cropped_padded_in_h, :self.cropped_padded_in_w,
-                     :]  # ignores outer values missed due to stride to preserve correct dimensions
+        cropped_in = pad(self.input_cache, self.padding)[:, :self.cropped_padded_in_h, :self.cropped_padded_in_w, :]  # ignores outer values missed due to stride to preserve correct dimensions
 
-        dz = dilate(output_gradient * self._ACTIVATION_MAP[self.act_func].derivative(self.unactivated_output_cache),
-                    self.stride)
-        dw = cross_correlate(cropped_in.transpose(3, 1, 2, 0), dz.transpose(1, 2, 0, 3), stride=(1, 1),
-                             padding=(0, 0)).transpose(1, 2, 0, 3) / batch_size
+        dz = dilate(output_gradient * self._ACTIVATION_MAP[self.act_func].derivative(self.unactivated_output_cache), self.stride)
+        dw = cross_correlate(cropped_in.transpose(3, 1, 2, 0), dz.transpose(1, 2, 0, 3), stride=(1, 1), padding=(0, 0)).transpose(1, 2, 0, 3) / batch_size
         db = np.sum(dz, axis=(0, 1, 2)) / batch_size
 
-        di_conv_padding = (  # adjusts padding to avoid calculating input gradients for active and inactive padding
+        di_conv_padding = (  # adjusts padding to avoid calculating input gradients for both active/inactive padding (full padding - actual padding + inactive input area)
             self.weights.shape[0] - 1 - self.padding[0],
             self.weights.shape[0] - 1 - self.padding[0] + (self.padded_in_h - self.cropped_padded_in_h),
             self.weights.shape[1] - 1 - self.padding[1],
