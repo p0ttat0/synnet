@@ -30,7 +30,7 @@ class Dropout(UtilityLayerBase):
         :return: output tensor
         """
         self.bin_map = np.random.rand(*input_tensor.shape[1:]) > self.dropout_rate
-        return input_tensor * self.bin_map
+        return input_tensor * self.bin_map * 1/(1-self.dropout_rate)
 
     def backprop(self, output_gradient: np.ndarray) -> np.ndarray:
         """
@@ -38,4 +38,4 @@ class Dropout(UtilityLayerBase):
         :param output_gradient: output gradient
         :return: input gradient
         """
-        return output_gradient * self.bin_map
+        return output_gradient * self.bin_map * 1/(1-self.dropout_rate)
