@@ -1,4 +1,3 @@
-import time
 from typing import Tuple, List
 from synnet.base.learnable_layer_base import LearnableLayerBase
 from synnet.base.utility_layer_base import UtilityLayerBase
@@ -8,7 +7,9 @@ from synnet.model.loss_functions import CCE, MSE
 from synnet.optimizers.adam import Adam
 from synnet.optimizers.no_optimizer import NoOptimizer
 import numpy as np
-from synnet.layers.helpers.training_display import ProgressBar
+import onnx
+from synnet.model.helpers.training_display import ProgressBar
+from synnet.layers.dense import Dense
 
 
 class Sequential:
@@ -26,9 +27,7 @@ class Sequential:
             'MSE': MSE()
         }
         self._METRICS_MAP = {
-            'accuracy': lambda x, y: 0,
-            'precision': lambda x, y: 0,
-            'recall': lambda x, y: 0
+            'accuracy': lambda training_predictions, training_labels: np.sum(np.argmax(training_predictions, axis=1) == np.argmax(training_labels, axis=1)) / training_labels.shape[0],
         }
 
         self.layers = [] if layers is None else layers
@@ -79,10 +78,8 @@ class Sequential:
             raise Exception("model not initialized")
 
         for layer in self.layers:
-            # s_time = time.time()
             if not isinstance(layer, Dropout) or not training:
                 input_tensor = layer.forprop(input_tensor)
-            # print(f"type: {type(layer)} | {time.time() - s_time}s")
         return input_tensor
 
     def backprop(self, output_gradient: np.ndarray, lr: float, clip_value: float):
@@ -96,12 +93,10 @@ class Sequential:
             raise Exception("model not initialized")
 
         for layer in reversed(self.layers):
-            # s_time = time.time()
             if isinstance(layer, LearnableLayerBase):
                 output_gradient = layer.backprop(output_gradient, lr, clip_value)
             else:
                 output_gradient = layer.backprop(output_gradient)
-            # print(f"type: {type(layer)} | {time.time() - s_time}s")
 
     def fit(self, data: Data, epochs: int, batch_size: int, learning_rate: float, clip_value: float, metrics: List[str] = None):
         """
@@ -145,3 +140,131 @@ class Sequential:
 
                 progress_bar.update(epoch, batch, metric_results)
         progress_bar.end()
+
+    def save_onnx(self, file_path: str, input_shape: Tuple[int, ...]):
+        if not self.initialized:
+            raise Exception("model not initialized")
+
+        nodes = []
+        initializers = []
+        input_name = "input"
+        layer_input = input_name
+
+        for i, layer in enumerate(self.layers):
+            if isinstance(layer, Dense):
+                # Weights
+                weight_name = f"W_{i}"
+                initializers.append(
+                    onnx.helper.make_tensor(
+                        name=weight_name,
+                        data_type=self._np_to_onnx_type(layer.weights.dtype),
+                        dims=layer.weights.shape,
+                        vals=layer.weights.flatten().tolist(),
+                    )
+                )
+
+                # MatMul
+                matmul_output = f"matmul_output_{i}"
+                nodes.append(
+                    onnx.helper.make_node(
+                        "MatMul",
+                        [layer_input, weight_name],
+                        [matmul_output],
+                        name=f"MatMul_{i}",
+                    )
+                )
+
+                # Bias
+                bias_name = f"B_{i}"
+                initializers.append(
+                    onnx.helper.make_tensor(
+                        name=bias_name,
+                        data_type=self._np_to_onnx_type(layer.bias.dtype),
+                        dims=layer.bias.shape,
+                        vals=layer.bias.flatten().tolist(),
+                    )
+                )
+
+                # Add
+                add_output = f"add_output_{i}"
+                nodes.append(
+                    onnx.helper.make_node(
+                        "Add",
+                        [matmul_output, bias_name],
+                        [add_output],
+                        name=f"Add_{i}",
+                    )
+                )
+
+                # Activation
+                activation_output = f"activation_output_{i}"
+                nodes.append(
+                    onnx.helper.make_node(
+                        layer.act_func.capitalize(),
+                        [add_output],
+                        [activation_output],
+                        name=f"Activation_{i}",
+                    )
+                )
+                layer_input = activation_output
+            else:
+                print(f"Skipping layer of type {type(layer)} as it is not supported for ONNX export.")
+
+
+        # Create the graph
+        graph_def = onnx.helper.make_graph(
+            nodes,
+            "synnet-model",
+            [onnx.helper.make_tensor_value_info(input_name, self._np_to_onnx_type(np.float32), [None, *input_shape])],
+            [onnx.helper.make_tensor_value_info(layer_input, self._np_to_onnx_type(np.float32), [None, self.layers[-1].size])],
+            initializer=initializers,
+        )
+
+        # Create the model
+        model_def = onnx.helper.make_model(graph_def, producer_name="synnet")
+        onnx.save(model_def, file_path)
+
+    @staticmethod
+    def load_onnx(file_path: str):
+        model = onnx.load(file_path)
+        layers = []
+        # This is a simplified loader and will not work for complex models
+        # It assumes a simple sequential model with Dense layers
+        for node in model.graph.node:
+            if node.op_type == "MatMul":
+                weights = None
+                bias = None
+                for initializer in model.graph.initializer:
+                    if initializer.name == node.input[1]:
+                        weights = onnx.numpy_helper.to_array(initializer)
+                
+                # Find the corresponding to Add node for the bias
+                add_node = next((n for n in model.graph.node if n.op_type == "Add" and n.input[0] == node.output[0]), None)
+                if add_node:
+                    for initializer in model.graph.initializer:
+                        if initializer.name == add_node.input[1]:
+                            bias = onnx.numpy_helper.to_array(initializer)
+
+                # Find the corresponding Activation node
+                activation_node = next((n for n in model.graph.node if n.input[0] == add_node.output[0]), None)
+                
+                if weights is not None and bias is not None and activation_node:
+                    layer = Dense(size=weights.shape[1], act_func=activation_node.op_type.lower())
+                    layer.weights = weights
+                    layer.bias = bias
+                    layers.append(layer)
+
+        return Sequential(layers)
+
+    @staticmethod
+    def _np_to_onnx_type(np_type):
+        if np_type == np.float32:
+            return onnx.TensorProto.FLOAT
+        elif np_type == np.float64:
+            return onnx.TensorProto.DOUBLE
+        elif np_type == np.int64:
+            return onnx.TensorProto.INT64
+        elif np_type == np.int32:
+            return onnx.TensorProto.INT32
+        else:
+            raise Exception(f"Unsupported numpy type: {np_type}")
