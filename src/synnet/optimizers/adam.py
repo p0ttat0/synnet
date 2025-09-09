@@ -5,16 +5,28 @@ import numpy as np
 
 class Adam(OptimizerBase):
     """
-    Adam optimizer.
+    The Adam optimizer.
 
-    :var step: current step
-    :var epsilon: epsilon value
-    :var b1: beta 1 value
-    :var b2: beta 2 value
-    :var fme: first moment estimate
-    :var sme: second moment estimate
+    This class implements the Adam optimization algorithm.
+
+    Attributes:
+        step (int): The current optimization step.
+        epsilon (float): A small value to prevent division by zero.
+        b1 (float): The exponential decay rate for the first moment estimates.
+        b2 (float): The exponential decay rate for the second moment estimates.
+        fme (dict): The first moment estimates for the weights and biases.
+        sme (dict): The second moment estimates for the weights and biases.
     """
+
     def __init__(self, b1: float = 0.9, b2: float = 0.999, epsilon: float = 1e-8):
+        """
+        Initializes the Adam optimizer.
+
+        Args:
+            b1: The exponential decay rate for the first moment estimates.
+            b2: The exponential decay rate for the second moment estimates.
+            epsilon: A small value to prevent division by zero.
+        """
         self.step = 1
         self.epsilon = epsilon
         self.b1 = b1
@@ -24,11 +36,15 @@ class Adam(OptimizerBase):
 
     def adjust_gradient(self, dw: np.ndarray, db: np.ndarray, lr: np.floating) -> Tuple[np.ndarray, ...]:
         """
-        calculates and applies weight and bias gradients using optimizer
-        :param dw: weight gradients
-        :param db: bias gradients
-        :param lr: learning rate
-        :return: weight and bias changes
+        Adjusts the gradients using the Adam optimization algorithm.
+
+        Args:
+            dw: The gradients of the weights.
+            db: The gradients of the biases.
+            lr: The learning rate.
+
+        Returns:
+            A tuple containing the adjusted weight and bias gradients.
         """
         self.fme["weights"] = (self.b1 * self.fme["weights"] + (1 - self.b1) * dw)
         self.fme["bias"] = (self.b1 * self.fme["bias"] + (1 - self.b1) * db)

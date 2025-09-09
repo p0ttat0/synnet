@@ -2,18 +2,24 @@ from typing import Tuple
 from numpy.lib.stride_tricks import as_strided
 import numpy as np
 
-def get_windows(input_tensor: np.ndarray, kernel_shape: Tuple[int, int, int, int], stride: Tuple[int, int], writable=False):
+
+def get_windows(input_tensor: np.ndarray, kernel_shape: Tuple[int, int, int, int], stride: Tuple[int, int],
+                writable=False):
     """
-    Extracts sliding windows from input tensor for convolution. (NHWC)
+    Extracts sliding windows from an input tensor for convolution.
 
-    :param input_tensor: Shape (batch, height, width, channels_in).
-    :param kernel_shape: Tuple (kernel_h, kernel_w, channels_in, channels_out).
-    :param stride: Tuple [stride_h, stride_w].
-    :param writable: whether windows are to be writable
+    Args:
+        input_tensor: The input tensor, with shape (batch, height, width,
+            channels_in).
+        kernel_shape: The shape of the kernel, (kernel_h, kernel_w,
+            channels_in, channels_out).
+        stride: The stride of the convolution, (stride_h, stride_w).
+        writable: Whether the returned windows should be writable.
 
-    :returns: np.ndarray: Windows of shape (batch, out_h, out_w, kernel_h, kernel_w, channels_in).
+    Returns:
+        An array of windows, with shape (batch, out_h, out_w, kernel_h,
+        kernel_w, channels_in).
     """
-
     batch_size, height, width, input_channels = input_tensor.shape
     kernel_height, kernel_width, _, output_channels = kernel_shape
 
@@ -42,19 +48,22 @@ def get_windows(input_tensor: np.ndarray, kernel_shape: Tuple[int, int, int, int
 
 def pad(x: np.ndarray, padding: Tuple[int, int] | Tuple[int, int, int, int]):
     """
-    Zeros padding (NHWC)
+    Applies zero padding to a tensor.
 
-    :param x: (batch_size, height, width, channels) np array
-    :param padding: (height_padding, width_padding) or (top_padding, bottom_padding, left_padding, right_padding)
+    Args:
+        x: The input tensor, with shape (batch_size, height, width, channels).
+        padding: The padding to apply, either (height_padding, width_padding) or
+            (top_padding, bottom_padding, left_padding, right_padding).
 
-    :return: padded input (NHWC)
+    Returns:
+        The padded tensor.
     """
     if len(padding) == 2:
         pad_h, pad_w = padding
         bs, in_h, in_w, ch = x.shape
 
         padded = np.zeros((bs, (in_h + 2 * pad_h), (in_w + 2 * pad_w), ch), dtype=x.dtype)
-        padded[:, pad_h:pad_h+in_h, pad_w:pad_w+in_w, :] = x
+        padded[:, pad_h:pad_h + in_h, pad_w:pad_w + in_w, :] = x
 
         return padded
     elif len(padding) == 4:
@@ -67,16 +76,20 @@ def pad(x: np.ndarray, padding: Tuple[int, int] | Tuple[int, int, int, int]):
     else:
         raise ValueError("padding must be a tuple of length 2 or 4")
 
+
 def dilate(input_tensor: np.ndarray, dilation_rate: Tuple[int, int]):
     """
-    matrix dilation (NHWC)
+    Dilates a tensor.
 
-    :param input_tensor: (NHWC)
-    :param dilation_rate: (height_dilation, width_dilation)
+    Args:
+        input_tensor: The input tensor.
+        dilation_rate: The dilation rate, (height_dilation, width_dilation).
 
-    :return: dilated input (NHWC)
+    Returns:
+        The dilated tensor.
     """
-    if dilation_rate == (1, 1): return input_tensor
+    if dilation_rate == (1, 1):
+        return input_tensor
 
     output_height = (input_tensor.shape[1] - 1) * dilation_rate[0] + 1
     output_width = (input_tensor.shape[2] - 1) * dilation_rate[1] + 1
@@ -85,20 +98,22 @@ def dilate(input_tensor: np.ndarray, dilation_rate: Tuple[int, int]):
 
     return dilated
 
-def cross_correlate(input_tensor: np.ndarray, kernel: np.ndarray, stride: Tuple[int, int], padding: Tuple[int, int] | Tuple[int, int, int, int]):
+
+def cross_correlate(input_tensor: np.ndarray, kernel: np.ndarray, stride: Tuple[int, int],
+                    padding: Tuple[int, int] | Tuple[int, int, int, int]):
     """
-    cross correlation (NHWC)
+    Performs cross-correlation.
 
-    :param input_tensor  : (NHWC)
-    :param kernel : (kernel_height, kernel_width, input_channels, output_channels)
-    :param stride : (vertical_stride, horizontal_stride)
-    :param padding: (height_padding, width_padding) or (top_padding, bottom_padding, left_padding, right_padding)
+    Args:
+        input_tensor: The input tensor.
+        kernel: The kernel.
+        stride: The stride.
+        padding: The padding.
 
-    :returns: cross correlation result (NHWC)
+    Returns:
+        The result of the cross-correlation.
     """
-
     padded_input = pad(input_tensor, padding)
-    kernel = kernel
 
     # --- Dimensions ---
     batch_size, _, _, input_channels = input_tensor.shape
@@ -111,21 +126,26 @@ def cross_correlate(input_tensor: np.ndarray, kernel: np.ndarray, stride: Tuple[
 
     windows = get_windows(padded_input, kernel.shape, stride)
 
-    x_col = np.reshape(windows, (batch_size * output_height * output_width, kernel_height * kernel_width * input_channels), order='C')
+    x_col = np.reshape(windows, (batch_size * output_height * output_width, kernel_height * kernel_width * input_channels),
+                       order='C')
     w_col = np.reshape(kernel, (kernel_height * kernel_width * input_channels, output_channels), order='F')
     output = np.dot(x_col, w_col)
 
     return output.reshape(batch_size, output_height, output_width, output_channels)
 
-def convolve(input_tensor: np.ndarray, kernel: np.ndarray, stride: Tuple[int, int], padding: Tuple[int, int] | Tuple[int, int, int, int]):
+
+def convolve(input_tensor: np.ndarray, kernel: np.ndarray, stride: Tuple[int, int],
+             padding: Tuple[int, int] | Tuple[int, int, int, int]):
     """
-    convolution built on cross_correlate (NHWC)
+    Performs convolution.
 
-    :param input_tensor  : (NHWC)
-    :param kernel : (kernel_height, kernel_width, input_channels, output_channels)
-    :param stride : (vertical_stride, horizontal_stride)
-    :param padding: (height_padding, width_padding) or (top_padding, bottom_padding, left_padding, right_padding)
+    Args:
+        input_tensor: The input tensor.
+        kernel: The kernel.
+        stride: The stride.
+        padding: The padding.
 
-    :return: convolution result (NHWC)
+    Returns:
+        The result of the convolution.
     """
     return cross_correlate(input_tensor, np.rot90(kernel, 2), stride, padding)

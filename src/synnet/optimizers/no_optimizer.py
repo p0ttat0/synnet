@@ -5,14 +5,21 @@ import numpy as np
 
 class NoOptimizer(OptimizerBase):
     """
-    No optimizer.
+    A placeholder optimizer that does not perform any optimization.
+
+    This class can be used when no optimization is desired.
     """
+
     def adjust_gradient(self, dw: np.ndarray, db: np.ndarray, lr: np.floating) -> Tuple[np.ndarray, ...]:
         """
-        calculates and applies weight and bias gradients using optimizer
-        :param dw: weight gradients
-        :param db: bias gradients
-        :param lr: learning rate
-        :return: weight and bias changes
+        Returns the gradients scaled by the learning rate.
+
+        Args:
+            dw: The gradients of the weights.
+            db: The gradients of the biases.
+            lr: The learning rate.
+
+        Returns:
+            A tuple containing the scaled weight and bias gradients.
         """
         return dw * lr, db * lr

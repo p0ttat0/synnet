@@ -7,25 +7,45 @@ import numpy as np
 
 class Dense(LearnableLayerBase):
     """
-    fully connected layer.
+    A fully connected layer.
 
-    assumes that inputs are (batch_size, prev_layer_neurons) np array
-    :var dtype: np dtype
-    :var size: number of neurons in layer
-    :var act_func: activation function
-    :var weights_init: weights initialization technique
-    :var bias_init: bias initialization technique
-    :var optimizer: optimizer obj
-    :var weights: (input_size, output_size) np array
-    :var bias: (output_size, ) np array
-    :var input_cache: (batchsize, input_size) np array
-    :var unactivated_output_cache: (batchsize, output_size) np array
+    This layer performs a linear transformation on the input tensor, followed by
+    an activation function.
+
+    Attributes:
+        dtype (np.dtype): The data type of the layer's parameters.
+        size (int): The number of neurons in the layer.
+        act_func (str): The activation function to use.
+        weights_init (str): The weight initialization method to use.
+        bias_init (str): The bias initialization method to use.
+        optimizer (OptimizerBase): The optimizer to use for updating the layer's
+            parameters.
+        weights (np.ndarray): The weights of the layer.
+        bias (np.ndarray): The bias of the layer.
+        input_cache (np.ndarray): A cache of the input tensor for backpropagation.
+        unactivated_output_cache (np.ndarray): A cache of the unactivated output
+            tensor for backpropagation.
     """
-    def __init__(self, size:int, act_func="relu", weights_init="he", bias_init="zero", dtype=np.float32):
-        if size <= 0: raise ValueError("size must be greater than zero")
-        if act_func not in ['relu', 'sigmoid', 'tanh', 'swish', 'softmax']: raise  ValueError(f"dense layer '{act_func}' activation function is not supported")
-        if weights_init not in ['lecun', 'swish', 'he', 'xavier']: raise ValueError(f"dense layer '{weights_init}' weight initialization is not supported")
-        if bias_init not in ['zero', 'zeros', 'none']: raise ValueError(f"dense layer '{bias_init}' bias initialization is not supported")
+
+    def __init__(self, size: int, act_func="relu", weights_init="he", bias_init="zero", dtype=np.float32):
+        """
+        Initializes the Dense layer.
+
+        Args:
+            size: The number of neurons in the layer.
+            act_func: The activation function to use.
+            weights_init: The weight initialization method to use.
+            bias_init: The bias initialization method to use.
+            dtype: The data type of the layer's parameters.
+        """
+        if size <= 0:
+            raise ValueError("size must be greater than zero")
+        if act_func not in ['relu', 'sigmoid', 'tanh', 'swish', 'softmax']:
+            raise ValueError(f"dense layer '{act_func}' activation function is not supported")
+        if weights_init not in ['lecun', 'swish', 'he', 'xavier']:
+            raise ValueError(f"dense layer '{weights_init}' weight initialization is not supported")
+        if bias_init not in ['zero', 'zeros', 'none']:
+            raise ValueError(f"dense layer '{bias_init}' bias initialization is not supported")
 
         super().__init__()
 
@@ -53,12 +73,16 @@ class Dense(LearnableLayerBase):
         self.input_cache = None
         self.unactivated_output_cache = None
 
-    def param_init(self, in_shape:Tuple[int]) -> Tuple[int]:
+    def param_init(self, in_shape: Tuple[int]) -> Tuple[int]:
         """
-        bias, weight and optimizer initialization
-        :param in_shape: number of neurons in previous layer
-        """
+        Initializes the parameters of the layer.
 
+        Args:
+            in_shape: The shape of the input to the layer.
+
+        Returns:
+            The shape of the output of the layer.
+        """
         in_size = in_shape[0]
         out_size = self.size
         weights_shape = (in_size, out_size)
@@ -67,32 +91,34 @@ class Dense(LearnableLayerBase):
             raise Exception("dense layer output size would be less or equal to 0")
 
         if self.weights is None:
-            match self.weights_init:
-                case "he" | "kaiming":
-                    self.weights = WeightInit.he(in_size, weights_shape, self.dtype)
-                case "xavier" | "glorot":
-                    self.weights = WeightInit.xavier(in_size, out_size, weights_shape, self.dtype)
-                case "lecun":
-                    self.weights = WeightInit.lecun(in_size, weights_shape, self.dtype)
-                case "swish":
-                    self.weights = WeightInit.swish(in_size, weights_shape, self.dtype)
-                case _:
-                    raise NotImplementedError(f"{self.weights_init} weight initialization not implemented")
+            if self.weights_init in ("he", "kaiming"):
+                self.weights = WeightInit.he(in_size, weights_shape, self.dtype)
+            elif self.weights_init in ("xavier", "glorot"):
+                self.weights = WeightInit.xavier(in_size, out_size, weights_shape, self.dtype)
+            elif self.weights_init == "lecun":
+                self.weights = WeightInit.lecun(in_size, weights_shape, self.dtype)
+            elif self.weights_init == "swish":
+                self.weights = WeightInit.swish(in_size, weights_shape, self.dtype)
+            else:
+                raise NotImplementedError(f"{self.weights_init} weight initialization not implemented")
 
         if self.bias is None:
-            match self.bias_init:
-                case "zero" | "zeros" | "none":
-                    self.bias = BiasInit.zero((out_size, ), self.dtype)
-                case _:
-                    raise NotImplementedError(f"{self.bias_init} bias initialization not implemented")
+            if self.bias_init in ("zero", "zeros", "none"):
+                self.bias = BiasInit.zero((out_size,), self.dtype)
+            else:
+                raise NotImplementedError(f"{self.bias_init} bias initialization not implemented")
 
-        return (out_size, )
+        return (out_size,)
 
     def forprop(self, input_tensor: np.ndarray) -> np.ndarray:
         """
-        forward propagation + caches input and unactivated output
-        :param input_tensor: (batchsize, input_size) np array
-        :return: activated output (batchsize, output_size) np array
+        Performs the forward propagation step.
+
+        Args:
+            input_tensor: The input tensor.
+
+        Returns:
+            The output tensor.
         """
         input_tensor = input_tensor.astype(self.dtype)
         unactivated = np.dot(input_tensor, self.weights) + self.bias
@@ -105,11 +131,15 @@ class Dense(LearnableLayerBase):
 
     def backprop(self, output_gradient: np.ndarray, lr: float, clip_value: float) -> np.ndarray:
         """
-        calculates and applies weight and bias gradients using optimizer
-        :param output_gradient: (batchsize, output_size) np array
-        :param lr: learning rate
-        :param clip_value: clip value
-        :return: input gradient (batchsize, input_size) np array
+        Performs the backward propagation step.
+
+        Args:
+            output_gradient: The gradient of the loss with respect to the output.
+            lr: The learning rate.
+            clip_value: The value to clip the gradients at.
+
+        Returns:
+            The gradient of the loss with respect to the input.
         """
         assert self.unactivated_output_cache is not None
         assert self.input_cache is not None
@@ -120,8 +150,8 @@ class Dense(LearnableLayerBase):
         batch_size = output_gradient.shape[0]
 
         dz = output_gradient * self._ACTIVATION_MAP[self.act_func].derivative(self.unactivated_output_cache)
-        dw = np.dot(self.input_cache.T, dz)/batch_size
-        db = np.sum(dz, axis=0)/batch_size
+        dw = np.dot(self.input_cache.T, dz) / batch_size
+        db = np.sum(dz, axis=0) / batch_size
         di = np.dot(dz, self.weights.T)
 
         weight_change, bias_change = self.optimizer.adjust_gradient(dw, db, lr)
